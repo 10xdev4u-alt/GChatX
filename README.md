@@ -9,6 +9,12 @@ A Google Chat bot integrated with Google Sheets for managing password requests a
 - **Notifications**: Admins notified via DM and dedicated room
 - **Card UI**: Rich interactive cards for better UX
 
+## Prerequisites
+
+- Google Workspace account
+- Access to Google Sheets and Apps Script
+- Google Chat enabled for your organization
+
 ## Setup Instructions
 
 ### 1. Create Google Sheets
