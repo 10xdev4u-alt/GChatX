@@ -70,6 +70,22 @@ Execute `setupInitialAdmin()` once to create first admin.
 - `/approve <REQUEST_ID>` - Approve request
 - `/reject <REQUEST_ID> [REASON]` - Reject request
 
+## File Structure
+
+```
+GChatX/
+├── Code.gs              # Main bot logic and message handlers
+├── SheetsService.gs     # Google Sheets CRUD operations
+├── UserService.gs       # User management functions
+├── QuestionPaperService.gs  # Question paper operations
+├── RequestService.gs    # Password request workflow
+├── NotificationService.gs  # Admin notifications
+├── CardBuilder.gs       # UI card builders
+├── Utils.gs             # Helper functions and constants
+├── appsscript.json      # Project manifest
+└── README.md            # This file
+```
+
 ## License
 
 MIT
