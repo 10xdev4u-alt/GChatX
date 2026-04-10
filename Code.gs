@@ -664,10 +664,3 @@ function showSystemStatus() {
 
   console.log('\n========================================');
 }
-
-  if (result.success) {
-    console.log(`Admin created: ${adminEmail}`);
-  } else {
-    console.log(`Error: ${result.error}`);
-  }
-}
