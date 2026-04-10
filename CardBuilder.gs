@@ -4,135 +4,26 @@
  */
 
 // =============================================================================
-// REQUEST CARDS
+// FACULTY CARDS
 // =============================================================================
 
 /**
- * Builds a card for submitting password requests
- * @param {string} qpRef - Question paper reference number (optional)
- * @param {string} message - Message to display (optional)
+ * Builds a card showing faculty's assignments with passwords
+ * @param {Array} assignments - Array of assignment objects
+ * @param {object} faculty - Faculty user object
  * @returns {object} Card object
  */
-function buildRequestCard(qpRef, message) {
-  const sections = [];
-
-  // Header section
-  const header = {
-    "title": "🔐 Request Question Paper Password",
-    "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/lock/v6/24px.svg"
-  };
-
-  // Message section if provided
-  if (message) {
-    sections.push({
-      "widgets": [{
-        "textParagraph": {
-          "text": message
-        }
-      }]
-    });
-  }
-
-  // Input section
-  sections.push({
-    "widgets": [{
-      "textInput": {
-        "label": "Question Paper Reference Number",
-        "type": "SINGLE_LINE",
-        "name": "qpReference",
-        "value": qpRef || "",
-        "hintText": "Enter the QP reference number (e.g., QP-001)"
-      }
-    }]
-  });
-
-  // Submit button section
-  sections.push({
-    "widgets": [{
-      "buttons": [{
-        "textButton": {
-          "text": "SUBMIT REQUEST",
-          "onClick": {
-            "action": {
-              "actionMethodName": "submitRequest",
-              "parameters": []
-            }
-          }
-        }
-      }]
-    }]
-  });
-
-  return {
-    "header": header,
-    "sections": sections
-  };
-}
-
-/**
- * Builds a card showing request submission confirmation
- * @param {object} requestDetails - Request details
- * @returns {object} Card object
- */
-function buildRequestSubmittedCard(requestDetails) {
-  return {
-    "header": {
-      "title": "✅ Request Submitted",
-      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/check_circle/v6/24px.svg"
-    },
-    "sections": [{
-      "widgets": [
-        {
-          "keyValue": {
-            "topLabel": "Request ID",
-            "content": requestDetails.requestId
-          }
-        },
-        {
-          "keyValue": {
-            "topLabel": "Question Paper",
-            "content": `${requestDetails.qpRefNumber}\n${requestDetails.qpName}`,
-            "contentMultiline": true
-          }
-        },
-        {
-          "keyValue": {
-            "topLabel": "Status",
-            "content": "Pending Approval",
-            "icon": "CLOCK"
-          }
-        }
-      ]
-    }, {
-      "widgets": [{
-        "textParagraph": {
-          "text": "Your request has been submitted and is awaiting admin approval. You will be notified once approved."
-        }
-      }]
-    }]
-  };
-}
-
-// =============================================================================
-// PENDING REQUESTS CARDS
-// =============================================================================
-
-/**
- * Builds a card showing all pending requests (batch view)
- * @param {Array} requests - Array of pending request objects
- * @returns {object} Card object
- */
-function buildPendingRequestsCard(requests) {
-  if (!requests || requests.length === 0) {
+function buildFacultyAssignmentsCard(assignments, faculty) {
+  if (!assignments || assignments.length === 0) {
     return {
       "header": {
-        "title": "📋 Pending Requests",
-        "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/inbox/v6/24px.svg"
+        "title": "📋 My Assignments",
+        "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/assignment/v6/24px.svg"
       },
       "sections": [{
         "widgets": [{
           "textParagraph": {
-            "text": "No pending requests at this time."
+            "text": `Hi ${faculty.Name},\n\nYou have no paper assignments at the moment.`
           }
         }]
       }]
@@ -142,65 +33,163 @@ function buildPendingRequestsCard(requests) {
   const sections = [{
     "widgets": [{
       "textParagraph": {
-        "text": `*${requests.length} pending request(s)*`
+        "text": `Hi **${faculty.Name}**,\n\nYou have **${assignments.length}** paper assignment(s). Click on a paper to view the password.`
       }
     }]
   }];
 
-  // Add each request as a section
-  requests.forEach((req, index) => {
+  // Group by status
+  const pending = assignments.filter(a => a.Status === ASSIGNMENT_STATUS.PENDING);
+  const retrieved = assignments.filter(a => a.Status === ASSIGNMENT_STATUS.RETRIEVED);
+  const submitted = assignments.filter(a => a.Status === ASSIGNMENT_STATUS.SUBMITTED);
+
+  if (pending.length > 0) {
+    sections.push({
+      "header": "⏳ Pending",
+      "widgets": pending.map(a => ({
+        "keyValue": {
+          "topLabel": a.QP_Ref_No,
+          "content": `${a.Subject_Name || 'N/A'}\nBoard: ${a.Board_Name || 'N/A'}`,
+          "contentMultiline": true,
+          "icon": "DESCRIPTION"
+        }
+      }))
+    });
+  }
+
+  if (retrieved.length > 0) {
+    sections.push({
+      "header": "🔓 Retrieved",
+      "widgets": retrieved.map(a => ({
+        "keyValue": {
+          "topLabel": a.QP_Ref_No,
+          "content": `${a.Subject_Name || 'N/A'}\nPassword retrieved`,
+          "contentMultiline": true,
+          "icon": "DESCRIPTION"
+        }
+      }))
+    });
+  }
+
+  if (submitted.length > 0) {
+    sections.push({
+      "header": "✅ Submitted",
+      "widgets": submitted.map(a => ({
+        "keyValue": {
+          "topLabel": a.QP_Ref_No,
+          "content": `${a.Subject_Name || 'N/A'}\nSubmitted`,
+          "contentMultiline": true,
+          "icon": "DONE"
+        }
+      }))
+    });
+  }
+
+  return {
+    "header": {
+      "title": "📋 My Assignments",
+      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/assignment/v6/24px.svg"
+    },
+    "sections": sections
+  };
+}
+
+/**
+ * Builds a card showing password for a specific assignment
+ * @param {object} assignment - Assignment object with password
+ * @returns {object} Card object
+ */
+function buildPasswordCard(assignment) {
+  return {
+    "header": {
+      "title": "🔐 Password for " + assignment.qpRefNo,
+      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/lock/v6/24px.svg"
+    },
+    "sections": [{
+      "widgets": [
+        {
+          "keyValue": {
+            "topLabel": "Question Paper",
+            "content": assignment.qpRefNo,
+            "icon": "DESCRIPTION"
+          }
+        },
+        {
+          "keyValue": {
+            "topLabel": "Subject",
+            "content": assignment.subjectName || 'N/A',
+            "icon": "BOOK"
+          }
+        },
+        {
+          "keyValue": {
+            "topLabel": "Board",
+            "content": assignment.boardName || 'N/A'
+          }
+        }
+      ]
+    }, {
+      "widgets": [{
+        "textParagraph": {
+          "text": "**Your Password:**"
+        }
+      }, {
+        "textParagraph": {
+          "text": `\`\`\`\n${assignment.password}\n\`\`\``,
+          "bold": true
+        }
+      }]
+    }, {
+      "widgets": [{
+        "textParagraph": {
+          "text": "⚠️ *Please encrypt your DOCX file with this password before submitting.*"
+        }
+      }]
+    }]
+  };
+}
+
+// =============================================================================
+// COE CARDS
+// =============================================================================
+
+/**
+ * Builds a card showing password for COE
+ * @param {object} data - Password data with assignments
+ * @returns {object} Card object
+ */
+function buildCOEPasswordCard(data) {
+  const sections = [{
+    "widgets": [{
+      "textParagraph": {
+        "text": `**QP Reference:** ${data.qpRefNo}\n\nFound **${data.assignments.length}** assignment(s) for this paper.`
+      }
+    }]
+  }];
+
+  data.assignments.forEach(a => {
     sections.push({
       "widgets": [
         {
           "keyValue": {
-            "topLabel": `Request ${index + 1}: ${req.requestId}`,
-            "content": `**User:** ${req.userName}\n**QP:** ${req.qpRefNumber} - ${req.qpName}\n**Time:** ${req.requestTimestamp}`,
+            "topLabel": a.facultyName,
+            "content": `Reg: ${a.facultyRegno}\nSubject: ${a.subjectName || 'N/A'}`,
             "contentMultiline": true,
             "icon": "PERSON"
           }
         },
         {
-          "buttons": [
-            {
-              "textButton": {
-                "text": "APPROVE",
-                "onClick": {
-                  "action": {
-                    "actionMethodName": "approveRequest",
-                    "parameters": [
-                      { "key": "requestId", "value": req.requestId }
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "textButton": {
-                "text": "REJECT",
-                "onClick": {
-                  "action": {
-                    "actionMethodName": "rejectRequest",
-                    "parameters": [
-                      { "key": "requestId", "value": req.requestId }
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "textButton": {
-                "text": "VIEW",
-                "onClick": {
-                  "action": {
-                    "actionMethodName": "viewRequest",
-                    "parameters": [
-                      { "key": "requestId", "value": req.requestId }
-                    ]
-                  }
-                }
-              }
-            }
-          ]
+          "keyValue": {
+            "topLabel": "Password",
+            "content": a.password,
+            "icon": "KEY"
+          }
+        },
+        {
+          "keyValue": {
+            "topLabel": "Status",
+            "content": a.status.toUpperCase()
+          }
         }
       ]
     });
@@ -208,268 +197,215 @@ function buildPendingRequestsCard(requests) {
 
   return {
     "header": {
-      "title": "📋 Pending Requests",
-      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/inbox/v6/24px.svg"
+      "title": "🔐 Password Access",
+      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/lock_open/v6/24px.svg"
     },
     "sections": sections
   };
 }
 
 /**
- * Builds a card showing single request details (individual view)
- * @param {object} request - Request object with full details
+ * Builds a card showing all board passwords
+ * @param {object} data - Board password data
  * @returns {object} Card object
  */
-function buildRequestDetailCard(request) {
-  return {
-    "header": {
-      "title": `📝 Request: ${request.requestId}`,
-      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/description/v6/24px.svg"
-    },
-    "sections": [{
+function buildBoardPasswordsCard(data) {
+  const sections = [{
+    "widgets": [{
+      "textParagraph": {
+        "text": `**Board:** ${data.boardName}\n\nTotal **${data.total}** assignment(s).`
+      }
+    }]
+  }];
+
+  data.assignments.forEach(a => {
+    sections.push({
       "widgets": [
         {
           "keyValue": {
-            "topLabel": "Requester",
-            "content": `${request.userName}\n${request.userEmail}`,
+            "topLabel": a.qpRefNo,
+            "content": `Faculty: ${a.facultyName}\nSubject: ${a.subjectName || 'N/A'}`,
             "contentMultiline": true,
-            "icon": "PERSON"
+            "icon": "DESCRIPTION"
           }
         },
         {
           "keyValue": {
-            "topLabel": "Question Paper",
-            "content": `${request.qpRefNumber}\n${request.qpName}`,
-            "contentMultiline": true,
-            "icon": "BOOK"
-          }
-        },
-        {
-          "keyValue": {
-            "topLabel": "Requested At",
-            "content": request.requestTimestamp,
-            "icon": "CLOCK"
+            "topLabel": "Password",
+            "content": a.password,
+            "icon": "KEY"
           }
         },
         {
           "keyValue": {
             "topLabel": "Status",
-            "content": request.status.toUpperCase(),
-            "icon": request.status === 'pending' ? 'CLOCK' :
-                    request.status === 'approved' ? 'CHECK_CIRCLE' : 'CANCEL'
+            "content": a.status.toUpperCase()
           }
         }
       ]
-    }, {
-      "widgets": [{
-        "textParagraph": {
-          "text": "*Actions*"
-        }
-      }, {
-        "buttons": [
-          {
-            "textButton": {
-              "text": "✅ APPROVE",
-              "onClick": {
-                "action": {
-                  "actionMethodName": "approveRequest",
-                  "parameters": [
-                    { "key": "requestId", "value": request.requestId }
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "textButton": {
-              "text": "❌ REJECT",
-              "onClick": {
-                "action": {
-                  "actionMethodName": "rejectRequest",
-                  "parameters": [
-                    { "key": "requestId", "value": request.requestId }
-                  ]
-                }
-              }
-            }
-          }
-        ]
-      }]
-    }]
-  };
-}
-
-// =============================================================================
-// STATUS CARDS
-// =============================================================================
-
-/**
- * Builds a card showing request status
- * @param {object} request - Request status details
- * @returns {object} Card object
- */
-function buildStatusCard(request) {
-  const statusIcon = request.status === 'approved' ? '✅' :
-                     request.status === 'rejected' ? '❌' : '⏳';
-
-  const sections = [{
-    "widgets": [
-      {
-        "keyValue": {
-          "topLabel": "Request ID",
-          "content": request.requestId
-        }
-      },
-      {
-        "keyValue": {
-          "topLabel": "Question Paper",
-          "content": `${request.qpRefNumber}\n${request.qpName}`,
-          "contentMultiline": true,
-          "icon": "BOOK"
-        }
-      },
-      {
-        "keyValue": {
-          "topLabel": "Status",
-          "content": `${statusIcon} ${request.status.toUpperCase()}`,
-          "icon": request.status === 'approved' ? 'CHECK_CIRCLE' :
-                  request.status === 'rejected' ? 'CANCEL' : 'CLOCK'
-        }
-      },
-      {
-        "keyValue": {
-          "topLabel": "Requested At",
-          "content": request.requestTimestamp,
-          "icon": "CLOCK"
-        }
-      }
-    ]
-  }];
-
-  // Add approval info if available
-  if (request.status === 'approved' && request.adminName) {
-    sections[0].widgets.push({
-      "keyValue": {
-        "topLabel": "Approved By",
-        "content": request.adminName,
-        "icon": "PERSON"
-      }
     });
-    if (request.approvalTimestamp) {
-      sections[0].widgets.push({
-        "keyValue": {
-          "topLabel": "Approved At",
-          "content": request.approvalTimestamp
-        }
-      });
-    }
-  }
-
-  // Add rejection info if available
-  if (request.status === 'rejected' && request.adminName) {
-    sections[0].widgets.push({
-      "keyValue": {
-        "topLabel": "Rejected By",
-        "content": request.adminName,
-        "icon": "PERSON"
-      }
-    });
-  }
+  });
 
   return {
     "header": {
-      "title": "📊 Request Status",
-      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/info/v6/24px.svg"
+      "title": "📋 Board Passwords",
+      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/folder/v6/24px.svg"
     },
     "sections": sections
   };
 }
 
 // =============================================================================
-// QUESTION PAPER LIST CARDS
+// STATS CARDS
 // =============================================================================
 
 /**
- * Builds a card listing available question papers
- * @param {Array} questionPapers - Array of question paper objects
+ * Builds a statistics card
+ * @param {object} stats - Statistics object
  * @returns {object} Card object
  */
-function buildQuestionPapersListCard(questionPapers) {
-  if (!questionPapers || questionPapers.length === 0) {
+function buildStatsCard(stats) {
+  return {
+    "header": {
+      "title": "📊 Assignment Statistics",
+      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/analytics/v6/24px.svg"
+    },
+    "sections": [{
+      "widgets": [
+        {
+          "keyValue": {
+            "topLabel": "Total Assignments",
+            "content": stats.total.toString(),
+            "icon": "DESCRIPTION"
+          }
+        },
+        {
+          "keyValue": {
+            "topLabel": "Pending",
+            "content": stats.pending.toString(),
+            "icon": "CLOCK"
+          }
+        },
+        {
+          "keyValue": {
+            "topLabel": "Retrieved",
+            "content": stats.retrieved.toString(),
+            "icon": "INBOX"
+          }
+        },
+        {
+          "keyValue": {
+            "topLabel": "Submitted",
+            "content": stats.submitted.toString(),
+            "icon": "DONE"
+          }
+        },
+        {
+          "keyValue": {
+            "topLabel": "Used",
+            "content": stats.used.toString(),
+            "icon": "CHECK_CIRCLE"
+          }
+        }
+      ]
+    }]
+  };
+}
+
+// =============================================================================
+// ACCESS LOG CARDS
+// =============================================================================
+
+/**
+ * Builds a card showing recent access logs
+ * @param {Array} logs - Array of log objects
+ * @returns {object} Card object
+ */
+function buildAccessLogCard(logs) {
+  if (!logs || logs.length === 0) {
     return {
       "header": {
-        "title": "📚 Question Papers",
-        "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/book/v6/24px.svg"
+        "title": "📜 Access Log",
+        "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/history/v6/24px.svg"
       },
       "sections": [{
         "widgets": [{
           "textParagraph": {
-            "text": "No question papers available."
+            "text": "No access logs found."
           }
         }]
       }]
     };
   }
 
-  const widgets = questionPapers.map((qp, index) => ({
-    "keyValue": {
-      "topLabel": `${index + 1}. ${qp.QPReferenceNumber}`,
-      "content": `${qp.SubjectName}\n(${qp.SubjectCode})`,
-      "contentMultiline": true,
-      "icon": "BOOK"
-    }
-  }));
+  const sections = [{
+    "widgets": [{
+      "textParagraph": {
+        "text": `Showing last **${logs.length}** access entries.`
+      }
+    }]
+  }];
+
+  logs.slice(0, 10).forEach(log => {
+    sections.push({
+      "widgets": [{
+        "keyValue": {
+          "topLabel": log.QP_Ref_No,
+          "content": `By: ${log.Requested_By} (${log.Requester_Role})\nPurpose: ${log.Purpose}`,
+          "contentMultiline": true,
+          "icon": "PERSON"
+        }
+      }, {
+        "keyValue": {
+          "topLabel": "Time",
+          "content": log.Requested_At,
+          "icon": "CLOCK"
+        }
+      }]
+    });
+  });
 
   return {
     "header": {
-      "title": "📚 Available Question Papers",
-      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/book/v6/24px.svg"
+      "title": "📜 Access Log",
+      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/history/v6/24px.svg"
     },
-    "sections": [{
-      "widgets": [{
-        "textParagraph": {
-          "text": `*${questionPapers.length} question paper(s) available*\n\nUse \`/request <QP_REF>\` to request a password.`
-        }
-      }]
-    }, {
-      "widgets": widgets
-    }]
+    "sections": sections
   };
 }
 
 // =============================================================================
-// HELP AND ERROR CARDS
+// HELP CARDS
 // =============================================================================
 
 /**
- * Builds a help card with available commands
+ * Builds a help card for faculty
  * @returns {object} Card object
  */
-function buildHelpCard() {
+function buildFacultyHelpCard() {
   return {
     "header": {
-      "title": "❓ Help - Password Request Bot",
+      "title": "❓ Faculty Help",
       "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/help/v6/24px.svg"
     },
     "sections": [{
-      "header": "User Commands",
+      "header": "Available Commands",
       "widgets": [{
         "textParagraph": {
-          "text": "• `/request <QP_REF>` - Request password for a question paper\n" +
-                  "• `/status [REQUEST_ID]` - Check request status\n" +
-                  "• `/list` - List available question papers\n" +
-                  "• `/history` - View your request history\n" +
+          "text": "• `/my-assignments` - View all your paper assignments\n" +
+                  "• `/get-password <QP_REF>` - Get password for a specific paper\n" +
                   "• `/help` - Show this help message"
         }
       }]
     }, {
-      "header": "Admin Commands",
+      "header": "How It Works",
       "widgets": [{
         "textParagraph": {
-          "text": "• `/pending` - View all pending requests\n" +
-                  "• `/view <REQUEST_ID>` - View single request details\n" +
-                  "• `/approve <REQUEST_ID>` - Approve a request\n" +
-                  "• `/reject <REQUEST_ID> [REASON]` - Reject a request"
+          "text": "1. When a paper is assigned to you, a unique password is generated.\n" +
+                  "2. Use `/my-assignments` to see your papers.\n" +
+                  "3. Use `/get-password QP-REF` to get the password.\n" +
+                  "4. Encrypt your DOCX file with this password.\n" +
+                  "5. Submit the encrypted file to EQPMS."
         }
       }]
     }]
@@ -477,11 +413,41 @@ function buildHelpCard() {
 }
 
 /**
- * Builds an error card
- * @param {string} errorMessage - Error message to display
+ * Builds a help card for COE
  * @returns {object} Card object
  */
-function buildErrorCard(errorMessage) {
+function buildCOEHelpCard() {
+  return {
+    "header": {
+      "title": "❓ COE Help",
+      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/help/v6/24px.svg"
+    },
+    "sections": [{
+      "header": "Available Commands",
+      "widgets": [{
+        "textParagraph": {
+          "text": "• `/password <QP_REF>` - Get password(s) for a paper\n" +
+                  "• `/board-passwords <BOARD>` - Get all passwords for a board\n" +
+                  "• `/pending` - Show pending assignments\n" +
+                  "• `/stats` - View assignment statistics\n" +
+                  "• `/access-log` - View recent password access log\n" +
+                  "• `/help` - Show this help message"
+        }
+      }]
+    }]
+  };
+}
+
+// =============================================================================
+// ERROR CARDS
+// =============================================================================
+
+/**
+ * Builds an error card
+ * @param {string} message - Error message
+ * @returns {object} Card object
+ */
+function buildErrorCard(message) {
   return {
     "header": {
       "title": "❌ Error",
@@ -490,20 +456,8 @@ function buildErrorCard(errorMessage) {
     "sections": [{
       "widgets": [{
         "textParagraph": {
-          "text": errorMessage
+          "text": message
         }
-      }, {
-        "buttons": [{
-          "textButton": {
-            "text": "GET HELP",
-            "onClick": {
-              "action": {
-                "actionMethodName": "showHelp",
-                "parameters": []
-              }
-            }
-          }
-        }]
       }]
     }]
   };
@@ -518,7 +472,7 @@ function buildErrorCard(errorMessage) {
 function buildSuccessCard(title, message) {
   return {
     "header": {
-      "title": `✅ ${title}`,
+      "title": "✅ " + title,
       "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/check_circle/v6/24px.svg"
     },
     "sections": [{
@@ -532,93 +486,35 @@ function buildSuccessCard(title, message) {
 }
 
 // =============================================================================
-// APPROVAL/REJECTION RESULT CARDS
+// WELCOME CARD
 // =============================================================================
 
 /**
- * Builds a card showing approval result with password
- * @param {object} details - Approval details including password
+ * Builds a welcome card
+ * @param {object} user - User object
  * @returns {object} Card object
  */
-function buildApprovalResultCard(details) {
+function buildWelcomeCard(user) {
+  const roleCommands = user.Role === USER_ROLES.FACULTY
+    ? "• `/my-assignments` - View your assignments\n• `/get-password <QP_REF>` - Get password"
+    : "• `/password <QP_REF>` - Get password for paper\n• `/board-passwords <BOARD>` - Get board passwords\n• `/stats` - View statistics";
+
   return {
     "header": {
-      "title": "✅ Request Approved",
-      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/check_circle/v6/24px.svg"
+      "title": "👋 Welcome to Password Bot",
+      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/lock/v6/24px.svg"
     },
     "sections": [{
-      "widgets": [
-        {
-          "keyValue": {
-            "topLabel": "Request ID",
-            "content": details.requestId
-          }
-        },
-        {
-          "keyValue": {
-            "topLabel": "Question Paper",
-            "content": `${details.qpRefNumber}\n${details.qpName}`,
-            "contentMultiline": true,
-            "icon": "BOOK"
-          }
-        },
-        {
-          "keyValue": {
-            "topLabel": "Password",
-            "content": details.password,
-            "icon": "KEY"
-          }
-        }
-      ]
-    }, {
       "widgets": [{
         "textParagraph": {
-          "text": `Password has been sent to ${details.userName} (${details.userEmail})`
+          "text": `Hello **${user.Name}**!\n\nYou are registered as **${user.Role.toUpperCase()}**.`
         }
       }]
-    }]
-  };
-}
-
-/**
- * Builds a card showing rejection result
- * @param {object} details - Rejection details
- * @returns {object} Card object
- */
-function buildRejectionResultCard(details) {
-  return {
-    "header": {
-      "title": "❌ Request Rejected",
-      "imageUrl": "https://fonts.gstatic.com/s/i/googlematerialicons/cancel/v6/24px.svg"
-    },
-    "sections": [{
-      "widgets": [
-        {
-          "keyValue": {
-            "topLabel": "Request ID",
-            "content": details.requestId
-          }
-        },
-        {
-          "keyValue": {
-            "topLabel": "Question Paper",
-            "content": `${details.qpRefNumber}\n${details.qpName}`,
-            "contentMultiline": true,
-            "icon": "BOOK"
-          }
-        },
-        {
-          "keyValue": {
-            "topLabel": "Reason",
-            "content": details.reason || 'No reason provided',
-            "contentMultiline": true
-          }
-        }
-      ]
     }, {
+      "header": "Quick Commands",
       "widgets": [{
         "textParagraph": {
-          "text": `User ${details.userName} has been notified of the rejection.`
+          "text": roleCommands + "\n• `/help` - Show all commands"
         }
       }]
     }]
