@@ -127,27 +127,40 @@ function findRowsByColumn(sheetName, columnIndex, value) {
 }
 
 /**
- * Gets a row by its row number
+ * Finds rows matching multiple column values (AND condition)
  * @param {string} sheetName - Name of the sheet
- * @param {number} rowNumber - 1-based row number
- * @returns {object|null} Row data as object
+ * @param {Array} conditions - Array of {columnIndex, value} objects
+ * @returns {Array} Array of matching row objects
  */
-function getRowByNumber(sheetName, rowNumber) {
+function findRowsByMultipleColumns(sheetName, conditions) {
   const sheet = getSheet(sheetName);
   const data = sheet.getDataRange().getValues();
 
-  if (data.length === 0 || rowNumber > data.length) return null;
+  if (data.length === 0) return [];
 
   const headers = data[0];
-  const rowData = data[rowNumber - 1];
+  const results = [];
 
-  const obj = {};
-  headers.forEach((header, index) => {
-    obj[header] = rowData[index];
-  });
-  obj._rowIndex = rowNumber;
+  for (let i = 1; i < data.length; i++) {
+    let matches = true;
+    for (const cond of conditions) {
+      if (data[i][cond.columnIndex - 1] !== cond.value) {
+        matches = false;
+        break;
+      }
+    }
 
-  return obj;
+    if (matches) {
+      const obj = {};
+      headers.forEach((header, index) => {
+        obj[header] = data[i][index];
+      });
+      obj._rowIndex = i + 1;
+      results.push(obj);
+    }
+  }
+
+  return results;
 }
 
 // =============================================================================
@@ -164,6 +177,18 @@ function appendRow(sheetName, rowData) {
   const sheet = getSheet(sheetName);
   sheet.appendRow(rowData);
   return sheet.getLastRow();
+}
+
+/**
+ * Appends multiple rows to a sheet
+ * @param {string} sheetName - Name of the sheet
+ * @param {Array} rowsData - Array of row arrays to append
+ * @returns {number} Number of rows added
+ */
+function appendRows(sheetName, rowsData) {
+  const sheet = getSheet(sheetName);
+  sheet.getRange(sheet.getLastRow() + 1, 1, rowsData.length, rowsData[0].length).setValues(rowsData);
+  return rowsData.length;
 }
 
 /**
@@ -233,22 +258,6 @@ function isSheetEmpty(sheetName) {
 }
 
 /**
- * Clears all data rows (keeps header)
- * @param {string} sheetName - Name of the sheet
- * @returns {boolean} Success status
- */
-function clearSheetData(sheetName) {
-  const sheet = getSheet(sheetName);
-  const lastRow = sheet.getLastRow();
-
-  if (lastRow > 1) {
-    sheet.deleteRows(2, lastRow - 1);
-  }
-
-  return true;
-}
-
-/**
  * Gets the headers of a sheet
  * @param {string} sheetName - Name of the sheet
  * @returns {Array} Array of header strings
@@ -277,4 +286,76 @@ function findRowIndex(sheetName, columnIndex, value) {
   }
 
   return null;
+}
+
+/**
+ * Creates a new sheet if it doesn't exist
+ * @param {string} sheetName - Name of the sheet
+ * @param {Array} headers - Header row values
+ * @returns {boolean} True if created or already exists
+ */
+function ensureSheetExists(sheetName, headers) {
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = spreadsheet.getSheetByName(sheetName);
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(sheetName);
+    if (headers && headers.length > 0) {
+      sheet.appendRow(headers);
+      // Format header row
+      const headerRange = sheet.getRange(1, 1, 1, headers.length);
+      headerRange.setFontWeight('bold');
+      headerRange.setBackground('#4285f4');
+      headerRange.setFontColor('white');
+    }
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Initializes all required sheets with headers
+ */
+function initializeSheets() {
+  // Assignments sheet
+  ensureSheetExists(SHEET_NAMES.ASSIGNMENTS, [
+    'Assignment_ID',
+    'QP_Ref_No',
+    'Faculty_Regno',
+    'Faculty_Name',
+    'Faculty_Email',
+    'Password',
+    'Generated_At',
+    'Status',
+    'Retrieved_At',
+    'Submitted_At',
+    'Board_Name',
+    'Subject_Name'
+  ]);
+
+  // Users sheet
+  ensureSheetExists(SHEET_NAMES.USERS, [
+    'User_ID',
+    'Name',
+    'Email',
+    'Regno',
+    'Role',
+    'Board',
+    'Status'
+  ]);
+
+  // Password Access Log sheet
+  ensureSheetExists(SHEET_NAMES.PASSWORD_ACCESS_LOG, [
+    'Log_ID',
+    'Assignment_ID',
+    'QP_Ref_No',
+    'Requested_By',
+    'Requested_By_Regno',
+    'Requested_At',
+    'Purpose',
+    'Requester_Role'
+  ]);
+
+  logInfo('initializeSheets', 'All sheets initialized successfully');
 }
