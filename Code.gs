@@ -486,10 +486,10 @@ function completeSetup() {
 
   // Step 2: Create admin user
   console.log('\n[Step 2/3] Creating admin user...');
-  const adminEmail = PropertiesService.getScriptProperties().getProperty('ADMIN_EMAIL') || 'admin@example.com';
+  const adminEmail = 'princetheprogrammerbtw@gmail.com';
 
   const adminResult = addUser({
-    name: 'System Admin',
+    name: 'Prince Admin',
     email: adminEmail,
     regno: 'ADMIN001',
     role: USER_ROLES.ADMIN,
