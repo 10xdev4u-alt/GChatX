@@ -11,6 +11,11 @@
  * Handles GET requests - Health check
  */
 function doGet(e) {
+  // Handle case when called directly from editor for testing
+  if (!e) {
+    e = { parameter: {} };
+  }
+
   const action = e.parameter.action || 'health';
 
   switch (action) {
@@ -35,6 +40,11 @@ function doGet(e) {
  * Handles POST requests - Assignment creation
  */
 function doPost(e) {
+  // Handle case when called directly from editor for testing
+  if (!e) {
+    e = { parameter: {}, postData: { contents: '{}' } };
+  }
+
   try {
     const action = e.parameter.action || 'create';
     const postData = e.postData ? JSON.parse(e.postData.contents) : null;
