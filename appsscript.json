@@ -1,16 +1,9 @@
 {
   "timeZone": "Asia/Kolkata",
   "dependencies": {
-    "enabledAdvancedServices": []
+    "enabledAdvancedServices": [],
+    "libraries": []
   },
   "exceptionLogging": "STACKDRIVER",
-  "runtimeVersion": "V8",
-  "chat": {
-    "addToSpaceDialog": {},
-    "avatars": {}
-  },
-  "webapp": {
-    "access": "ANYONE_ANONYMOUS",
-    "executeAs": "USER_DEPLOYING"
-  }
+  "runtimeVersion": "V8"
 }
