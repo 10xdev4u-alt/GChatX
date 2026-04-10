@@ -316,10 +316,13 @@ function ensureSheetExists(sheetName, headers) {
 
 /**
  * Initializes all required sheets with headers
+ * Run this function once after deployment
  */
 function initializeSheets() {
-  // Assignments sheet
-  ensureSheetExists(SHEET_NAMES.ASSIGNMENTS, [
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  // ===== ASSIGNMENTS SHEET =====
+  const assignmentsHeaders = [
     'Assignment_ID',
     'QP_Ref_No',
     'Faculty_Regno',
@@ -332,10 +335,11 @@ function initializeSheets() {
     'Submitted_At',
     'Board_Name',
     'Subject_Name'
-  ]);
+  ];
+  createOrResetSheet(spreadsheet, SHEET_NAMES.ASSIGNMENTS, assignmentsHeaders, '#4285f4');
 
-  // Users sheet
-  ensureSheetExists(SHEET_NAMES.USERS, [
+  // ===== USERS SHEET =====
+  const usersHeaders = [
     'User_ID',
     'Name',
     'Email',
@@ -343,10 +347,11 @@ function initializeSheets() {
     'Role',
     'Board',
     'Status'
-  ]);
+  ];
+  createOrResetSheet(spreadsheet, SHEET_NAMES.USERS, usersHeaders, '#34a853');
 
-  // Password Access Log sheet
-  ensureSheetExists(SHEET_NAMES.PASSWORD_ACCESS_LOG, [
+  // ===== PASSWORD ACCESS LOG SHEET =====
+  const logHeaders = [
     'Log_ID',
     'Assignment_ID',
     'QP_Ref_No',
@@ -355,7 +360,85 @@ function initializeSheets() {
     'Requested_At',
     'Purpose',
     'Requester_Role'
-  ]);
+  ];
+  createOrResetSheet(spreadsheet, SHEET_NAMES.PASSWORD_ACCESS_LOG, logHeaders, '#ea4335');
 
   logInfo('initializeSheets', 'All sheets initialized successfully');
+  SpreadsheetApp.flush();
+}
+
+/**
+ * Creates or resets a sheet with headers
+ * @param {Spreadsheet} spreadsheet - Spreadsheet object
+ * @param {string} sheetName - Name of the sheet
+ * @param {Array} headers - Header row values
+ * @param {string} headerColor - Header background color (hex)
+ */
+function createOrResetSheet(spreadsheet, sheetName, headers, headerColor) {
+  let sheet = spreadsheet.getSheetByName(sheetName);
+
+  if (!sheet) {
+    // Create new sheet
+    sheet = spreadsheet.insertSheet(sheetName);
+    logInfo('createOrResetSheet', `Created new sheet: ${sheetName}`);
+  }
+
+  // Clear existing data
+  sheet.clear();
+
+  // Add headers
+  sheet.appendRow(headers);
+
+  // Format header row
+  const headerRange = sheet.getRange(1, 1, 1, headers.length);
+  headerRange.setFontWeight('bold');
+  headerRange.setBackground(headerColor);
+  headerRange.setFontColor('white');
+  headerRange.setHorizontalAlignment('center');
+
+  // Set column widths
+  const columnWidths = {
+    [SHEET_NAMES.ASSIGNMENTS]: [150, 120, 120, 150, 200, 150, 150, 100, 150, 150, 120, 150],
+    [SHEET_NAMES.USERS]: [120, 150, 200, 120, 100, 120, 100],
+    [SHEET_NAMES.PASSWORD_ACCESS_LOG]: [120, 150, 120, 150, 150, 150, 200, 120]
+  };
+
+  if (columnWidths[sheetName]) {
+    for (let i = 0; i < columnWidths[sheetName].length; i++) {
+      sheet.setColumnWidth(i + 1, columnWidths[sheetName][i]);
+    }
+  }
+
+  // Freeze header row
+  sheet.setFrozenRows(1);
+
+  logInfo('createOrResetSheet', `Sheet ${sheetName} configured with ${headers.length} columns`);
+}
+
+/**
+ * Checks if sheets are initialized
+ * @returns {boolean} True if all sheets exist with headers
+ */
+function areSheetsInitialized() {
+  try {
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    const requiredSheets = [
+      SHEET_NAMES.ASSIGNMENTS,
+      SHEET_NAMES.USERS,
+      SHEET_NAMES.PASSWORD_ACCESS_LOG
+    ];
+
+    for (const sheetName of requiredSheets) {
+      const sheet = spreadsheet.getSheetByName(sheetName);
+      if (!sheet) return false;
+
+      const lastRow = sheet.getLastRow();
+      if (lastRow === 0) return false;
+    }
+
+    return true;
+  } catch (e) {
+    return false;
+  }
 }

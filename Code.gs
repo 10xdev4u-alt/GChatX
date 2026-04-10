@@ -466,37 +466,204 @@ function buildMessageResponse(cardOrText) {
 // =============================================================================
 
 /**
- * Initializes the system
- * Run this once after deployment
+ * COMPLETE SETUP - Run this once after deployment
+ * This function:
+ * 1. Creates all required sheets with proper headers
+ * 2. Creates initial admin user
+ * 3. Creates test data (optional)
+ *
+ * IMPORTANT: Update ADMIN_EMAIL before running!
  */
-function initializeSystem() {
-  console.log('Initializing Password Bot System...');
+function completeSetup() {
+  console.log('========================================');
+  console.log('STARTING COMPLETE SETUP');
+  console.log('========================================');
 
-  // Initialize sheets
+  // Step 1: Initialize sheets
+  console.log('\n[Step 1/3] Initializing sheets...');
   initializeSheets();
+  console.log('✅ Sheets created with headers');
 
-  console.log('System initialized successfully.');
-  console.log('Next steps:');
-  console.log('1. Deploy as Web App for API access');
-  console.log('2. Configure EQPMS to call the API');
-  console.log('3. Add users or sync from EQPMS');
-}
+  // Step 2: Create admin user
+  console.log('\n[Step 2/3] Creating admin user...');
+  const adminEmail = PropertiesService.getScriptProperties().getProperty('ADMIN_EMAIL') || 'admin@example.com';
 
-/**
- * Sets up initial admin user
- * Run this once after deployment
- */
-function setupAdmin() {
-  // TODO: Replace with your email
-  const adminEmail = 'YOUR_EMAIL@example.com';
-
-  const result = addUser({
-    name: 'Admin',
+  const adminResult = addUser({
+    name: 'System Admin',
     email: adminEmail,
     regno: 'ADMIN001',
     role: USER_ROLES.ADMIN,
     board: 'ALL'
   });
+
+  if (adminResult.success) {
+    console.log(`✅ Admin created: ${adminEmail}`);
+  } else {
+    console.log(`⚠️ Admin setup: ${adminResult.error}`);
+  }
+
+  // Step 3: Create sample COE user
+  console.log('\n[Step 3/3] Creating sample COE user...');
+  const coeResult = addUser({
+    name: 'COE User',
+    email: 'coe@example.com',
+    regno: 'COE001',
+    role: USER_ROLES.COE,
+    board: 'ALL'
+  });
+
+  if (coeResult.success) {
+    console.log('✅ Sample COE user created');
+  }
+
+  console.log('\n========================================');
+  console.log('SETUP COMPLETE!');
+  console.log('========================================');
+  console.log('\nNext steps:');
+  console.log('1. Update SPREADSHEET_ID in Utils.gs');
+  console.log('2. Deploy as Web App for EQPMS API');
+  console.log('3. Deploy as Google Chat bot');
+  console.log('4. Update admin email: run setAdminEmail("your@email.com")');
+  console.log('\nSheet columns created:');
+
+  // Show sheet info
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  [SHEET_NAMES.ASSIGNMENTS, SHEET_NAMES.USERS, SHEET_NAMES.PASSWORD_ACCESS_LOG].forEach(name => {
+    const sheet = spreadsheet.getSheetByName(name);
+    if (sheet) {
+      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      console.log(`\n${name}: ${headers.join(' | ')}`);
+    }
+  });
+}
+
+/**
+ * Sets the admin email for setup
+ * @param {string} email - Admin email address
+ */
+function setAdminEmail(email) {
+  PropertiesService.getScriptProperties().setProperty('ADMIN_EMAIL', email);
+  console.log(`Admin email set to: ${email}`);
+}
+
+/**
+ * Quick setup - just creates sheets
+ * Use this if you only need to initialize sheets
+ */
+function quickSetup() {
+  initializeSheets();
+  console.log('Sheets initialized. Run completeSetup() for full setup.');
+}
+
+/**
+ * Creates test assignments for development
+ */
+function createTestAssignments() {
+  console.log('Creating test assignments...');
+
+  // Create test faculty users first
+  addUser({
+    name: 'Dr. Test Faculty 1',
+    email: 'faculty1@test.com',
+    regno: 'FAC001',
+    role: USER_ROLES.FACULTY,
+    board: 'CSE'
+  });
+
+  addUser({
+    name: 'Dr. Test Faculty 2',
+    email: 'faculty2@test.com',
+    regno: 'FAC002',
+    role: USER_ROLES.FACULTY,
+    board: 'CSE'
+  });
+
+  addUser({
+    name: 'Dr. Test Faculty 3',
+    email: 'faculty3@test.com',
+    regno: 'FAC003',
+    role: USER_ROLES.FACULTY,
+    board: 'ECE'
+  });
+
+  // Create test assignments
+  createAssignment({
+    qpRefNo: 'QP-CS101-2024',
+    facultyRegno: 'FAC001',
+    facultyName: 'Dr. Test Faculty 1',
+    facultyEmail: 'faculty1@test.com',
+    boardName: 'CSE',
+    subjectName: 'Data Structures'
+  });
+
+  createAssignment({
+    qpRefNo: 'QP-CS102-2024',
+    facultyRegno: 'FAC001',
+    facultyName: 'Dr. Test Faculty 1',
+    facultyEmail: 'faculty1@test.com',
+    boardName: 'CSE',
+    subjectName: 'Algorithms'
+  });
+
+  createAssignment({
+    qpRefNo: 'QP-CS201-2024',
+    facultyRegno: 'FAC002',
+    facultyName: 'Dr. Test Faculty 2',
+    facultyEmail: 'faculty2@test.com',
+    boardName: 'CSE',
+    subjectName: 'Operating Systems'
+  });
+
+  createAssignment({
+    qpRefNo: 'QP-EC101-2024',
+    facultyRegno: 'FAC003',
+    facultyName: 'Dr. Test Faculty 3',
+    facultyEmail: 'faculty3@test.com',
+    boardName: 'ECE',
+    subjectName: 'Digital Electronics'
+  });
+
+  console.log('Test data created successfully!');
+  console.log('Test Users: FAC001, FAC002, FAC003 (faculty), COE001 (coe)');
+  console.log('Test Assignments: QP-CS101-2024, QP-CS102-2024, QP-CS201-2024, QP-EC101-2024');
+}
+
+/**
+ * Shows current system status
+ */
+function showSystemStatus() {
+  console.log('========================================');
+  console.log('SYSTEM STATUS');
+  console.log('========================================');
+
+  // Check spreadsheet
+  try {
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    console.log(`\n✅ Spreadsheet connected: ${spreadsheet.getName()}`);
+  } catch (e) {
+    console.log(`\n❌ Spreadsheet error: ${e.message}`);
+    console.log('Update SPREADSHEET_ID in Utils.gs');
+    return;
+  }
+
+  // Show stats
+  const stats = getAssignmentStats();
+  console.log('\n📊 Assignment Statistics:');
+  console.log(`   Total: ${stats.total}`);
+  console.log(`   Pending: ${stats.pending}`);
+  console.log(`   Retrieved: ${stats.retrieved}`);
+  console.log(`   Submitted: ${stats.submitted}`);
+  console.log(`   Used: ${stats.used}`);
+
+  // Show users
+  const users = getAllUsers();
+  console.log(`\n👥 Users: ${users.length} registered`);
+  users.forEach(u => {
+    console.log(`   - ${u.Name} (${u.Role}) - ${u.Email}`);
+  });
+
+  console.log('\n========================================');
+}
 
   if (result.success) {
     console.log(`Admin created: ${adminEmail}`);
