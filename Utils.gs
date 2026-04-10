@@ -8,8 +8,7 @@
 // =============================================================================
 
 // Google Sheets Configuration
-// TODO: Replace with your actual Google Spreadsheet ID
-const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE';
+const SPREADSHEET_ID = '1nGi1FiJ06DqYfym5quzCJL9mWjcKo4w12Vdrn2aFWMA';
 
 // Admin Space Webhook URL for notifications
 // TODO: Replace with your actual admin space webhook URL
