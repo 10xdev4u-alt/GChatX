@@ -1,6 +1,6 @@
 /**
  * Code.gs - Main Bot Logic
- * Google Chat Bot for Password Request & Approval System
+ * Google Chat Bot for EQPMS Password Management
  */
 
 // =============================================================================
@@ -29,32 +29,45 @@ function onMessage(event) {
     // Parse command
     const command = parseCommand(text);
 
-    // Route to appropriate handler
+    // Route to appropriate handler based on role
     switch (command.action) {
-      case 'request':
-        return handleRequestCommand(event, user, command.args);
-      case 'status':
-        return handleStatusCommand(event, user, command.args);
-      case 'list':
-        return handleListCommand(event, user);
-      case 'history':
-        return handleHistoryCommand(event, user);
+      // Faculty commands
+      case 'my-assignments':
+      case 'assignments':
+        return handleMyAssignments(event, user);
+
+      case 'get-password':
+        return handleGetPasswordCommand(event, user, command.args);
+
+      // COE/Admin commands
+      case 'password':
+        return handlePasswordCommand(event, user, command.args);
+
+      case 'board-passwords':
+        return handleBoardPasswordsCommand(event, user, command.args);
+
       case 'pending':
         return handlePendingCommand(event, user);
-      case 'view':
-        return handleViewCommand(event, user, command.args);
-      case 'approve':
-        return handleApproveCommand(event, user, command.args);
-      case 'reject':
-        return handleRejectCommand(event, user, command.args);
+
+      case 'stats':
+        return handleStatsCommand(event, user);
+
+      case 'access-log':
+        return handleAccessLogCommand(event, user);
+
+      // Common commands
       case 'help':
         return handleHelpCommand(event, user);
+
+      case 'register':
+        return handleRegisterCommand(event, user, command.args);
+
       default:
         return handleUnknownCommand(event, user, text);
     }
   } catch (e) {
     logError('onMessage', e);
-    return buildMessageResponse(buildErrorCard('An unexpected error occurred. Please try again later.'));
+    return buildMessageResponse(buildErrorCard('An unexpected error occurred. Please try again.'));
   }
 }
 
@@ -85,137 +98,194 @@ function parseCommand(text) {
 }
 
 // =============================================================================
-// USER COMMAND HANDLERS
+// FACULTY COMMAND HANDLERS
 // =============================================================================
 
 /**
- * Handles /request command
+ * Handles /my-assignments command
  * @param {object} event - Chat event
  * @param {object} user - User object
- * @param {string} args - Command arguments (QP reference number)
  * @returns {object} Response
  */
-function handleRequestCommand(event, user, args) {
-  const qpRef = args.trim();
+function handleMyAssignments(event, user) {
+  // Get assignments for this faculty
+  const assignments = getAssignmentsByFaculty(user.Regno);
 
-  if (!qpRef) {
-    return buildMessageResponse(buildRequestCard(null, 'Please provide a question paper reference number.'));
+  // Build card
+  const card = buildFacultyAssignmentsCard(assignments, user);
+
+  return buildMessageResponse(card);
+}
+
+/**
+ * Handles /get-password command for faculty
+ * @param {object} event - Chat event
+ * @param {object} user - User object
+ * @param {string} args - QP Reference number
+ * @returns {object} Response
+ */
+function handleGetPasswordCommand(event, user, args) {
+  const qpRefNo = args.trim();
+
+  if (!qpRefNo) {
+    return buildMessageResponse(buildErrorCard('Please provide a QP Reference number.\n\nUsage: `/get-password QP-CS101-2024`'));
   }
 
-  // Create request
-  const result = createRequest(user.UserID, qpRef);
+  // Find assignment for this faculty and QP
+  const assignment = findAssignmentByQPAndFaculty(qpRefNo, user.Regno);
+
+  if (!assignment) {
+    return buildMessageResponse(buildErrorCard(`No assignment found for ${qpRefNo} assigned to you.\n\nUse \`/my-assignments\` to see your papers.`));
+  }
+
+  // Get password
+  const result = getPasswordForFaculty(assignment.Assignment_ID, user);
 
   if (!result.success) {
     return buildMessageResponse(buildErrorCard(result.error));
   }
 
-  // Notify admins
-  const requestDetails = {
-    requestId: result.data.requestId,
-    userName: result.data.userName,
-    userEmail: result.data.userEmail,
-    qpRefNumber: result.data.qpRefNumber,
-    qpName: result.data.qpName,
-    requestTimestamp: formatTimestamp(new Date())
-  };
+  // Build password card
+  const card = buildPasswordCard(result.data);
 
-  notifyAllAdmins(requestDetails);
-
-  return buildMessageResponse(buildRequestSubmittedCard(result.data));
+  return buildMessageResponse(card);
 }
 
-/**
- * Handles /status command
- * @param {object} event - Chat event
- * @param {object} user - User object
- * @param {string} args - Command arguments (optional request ID)
- * @returns {object} Response
- */
-function handleStatusCommand(event, user, args) {
-  const requestId = args.trim();
-
-  if (requestId) {
-    // Get specific request status
-    const request = getRequestById(requestId);
-
-    if (!request) {
-      return buildMessageResponse(buildErrorCard('Request not found.'));
-    }
-
-    // Verify user owns this request (or is admin)
-    if (request.UserID !== user.UserID && user.Role !== USER_ROLES.ADMIN) {
-      return buildMessageResponse(buildErrorCard('You do not have permission to view this request.'));
-    }
-
-    const statusData = getRequestStatus(requestId);
-    return buildMessageResponse(buildStatusCard(statusData.data));
-  } else {
-    // Get user's recent requests
-    const historyResult = getUserRequestHistory(user.UserID);
-
-    if (!historyResult.success || historyResult.data.length === 0) {
-      return buildMessageResponse({
-        text: 'You have no password requests yet. Use `/request <QP_REF>` to submit one.'
-      });
-    }
-
-    // Show last 3 requests
-    const recentRequests = historyResult.data.slice(0, 3);
-    let statusText = '*Your Recent Requests:*\n\n';
-
-    recentRequests.forEach((req, index) => {
-      const statusIcon = req.status === 'approved' ? '✅' :
-                         req.status === 'rejected' ? '❌' : '⏳';
-      statusText += `${index + 1}. ${statusIcon} **${req.qpRefNumber}** - ${req.qpName}\n`;
-      statusText += `   Status: ${req.status.toUpperCase()}\n`;
-      statusText += `   Requested: ${req.requestTimestamp}\n\n`;
-    });
-
-    return { text: statusText };
-  }
-}
+// =============================================================================
+// COE/ADMIN COMMAND HANDLERS
+// =============================================================================
 
 /**
- * Handles /list command
+ * Handles /password command for COE
  * @param {object} event - Chat event
  * @param {object} user - User object
+ * @param {string} args - QP Reference number
  * @returns {object} Response
  */
-function handleListCommand(event, user) {
-  const questionPapers = getActiveQuestionPapers();
-  return buildMessageResponse(buildQuestionPapersListCard(questionPapers));
-}
+function handlePasswordCommand(event, user, args) {
+  const qpRefNo = args.trim();
 
-/**
- * Handles /history command
- * @param {object} event - Chat event
- * @param {object} user - User object
- * @returns {object} Response
- */
-function handleHistoryCommand(event, user) {
-  const historyResult = getUserRequestHistory(user.UserID);
-
-  if (!historyResult.success || historyResult.data.length === 0) {
-    return { text: 'You have no password request history.' };
+  if (!qpRefNo) {
+    return buildMessageResponse(buildErrorCard('Please provide a QP Reference number.\n\nUsage: `/password QP-CS101-2024`'));
   }
 
-  let historyText = '*Your Request History:*\n\n';
+  // Validate COE access
+  const accessResult = validatePasswordAccess(user.Email);
+  if (!accessResult.success) {
+    return buildMessageResponse(buildErrorCard(accessResult.error));
+  }
 
-  historyResult.forEach((req, index) => {
-    const statusIcon = req.status === 'approved' ? '✅' :
-                       req.status === 'rejected' ? '❌' : '⏳';
-    historyText += `${index + 1}. ${statusIcon} **${req.qpRefNumber}** - ${req.qpName}\n`;
-    historyText += `   Status: ${req.status.toUpperCase()}\n`;
-    historyText += `   Requested: ${req.requestTimestamp}\n`;
+  // Get password
+  const result = getPasswordForCOE(qpRefNo, user);
 
-    if (req.approvalTimestamp) {
-      historyText += `   ${req.status === 'approved' ? 'Approved' : 'Rejected'}: ${req.approvalTimestamp}\n`;
-    }
-    historyText += '\n';
+  if (!result.success) {
+    return buildMessageResponse(buildErrorCard(result.error));
+  }
+
+  // Build COE password card
+  const card = buildCOEPasswordCard(result.data);
+
+  return buildMessageResponse(card);
+}
+
+/**
+ * Handles /board-passwords command for COE
+ * @param {object} event - Chat event
+ * @param {object} user - User object
+ * @param {string} args - Board name
+ * @returns {object} Response
+ */
+function handleBoardPasswordsCommand(event, user, args) {
+  const boardName = args.trim();
+
+  if (!boardName) {
+    return buildMessageResponse(buildErrorCard('Please provide a board name.\n\nUsage: `/board-passwords CSE`'));
+  }
+
+  // Validate COE access
+  const accessResult = validatePasswordAccess(user.Email);
+  if (!accessResult.success) {
+    return buildMessageResponse(buildErrorCard(accessResult.error));
+  }
+
+  // Get board passwords
+  const result = getBoardPasswords(boardName, user);
+
+  if (!result.success) {
+    return buildMessageResponse(buildErrorCard(result.error));
+  }
+
+  // Build board passwords card
+  const card = buildBoardPasswordsCard(result.data);
+
+  return buildMessageResponse(card);
+}
+
+/**
+ * Handles /pending command
+ * @param {object} event - Chat event
+ * @param {object} user - User object
+ * @returns {object} Response
+ */
+function handlePendingCommand(event, user) {
+  // Validate COE access
+  const accessResult = validatePasswordAccess(user.Email);
+  if (!accessResult.success) {
+    return buildMessageResponse(buildErrorCard(accessResult.error));
+  }
+
+  // Get pending assignments
+  const pending = getAssignmentsByStatus(ASSIGNMENT_STATUS.PENDING);
+
+  if (pending.length === 0) {
+    return { text: 'No pending assignments.' };
+  }
+
+  let text = `*Pending Assignments:* ${pending.length}\n\n`;
+
+  pending.slice(0, 20).forEach((a, i) => {
+    text += `${i + 1}. **${a.QP_Ref_No}** - ${a.Faculty_Name} (${a.Subject_Name || 'N/A'})\n`;
   });
 
-  return { text: historyText };
+  return { text: text };
 }
+
+/**
+ * Handles /stats command
+ * @param {object} event - Chat event
+ * @param {object} user - User object
+ * @returns {object} Response
+ */
+function handleStatsCommand(event, user) {
+  const stats = getAssignmentStats();
+  const card = buildStatsCard(stats);
+
+  return buildMessageResponse(card);
+}
+
+/**
+ * Handles /access-log command
+ * @param {object} event - Chat event
+ * @param {object} user - User object
+ * @returns {object} Response
+ */
+function handleAccessLogCommand(event, user) {
+  // Validate COE access
+  const accessResult = validatePasswordAccess(user.Email);
+  if (!accessResult.success) {
+    return buildMessageResponse(buildErrorCard(accessResult.error));
+  }
+
+  // Get recent logs
+  const logs = getRecentAccessLogs(20);
+  const card = buildAccessLogCard(logs);
+
+  return buildMessageResponse(card);
+}
+
+// =============================================================================
+// COMMON COMMAND HANDLERS
+// =============================================================================
 
 /**
  * Handles /help command
@@ -224,136 +294,78 @@ function handleHistoryCommand(event, user) {
  * @returns {object} Response
  */
 function handleHelpCommand(event, user) {
-  return buildMessageResponse(buildHelpCard());
-}
+  let card;
 
-// =============================================================================
-// ADMIN COMMAND HANDLERS
-// =============================================================================
-
-/**
- * Handles /pending command (admin only)
- * @param {object} event - Chat event
- * @param {object} user - User object
- * @returns {object} Response
- */
-function handlePendingCommand(event, user) {
-  // Validate admin
-  const adminValidation = validateAdmin(user.Email);
-  if (!adminValidation.success) {
-    return buildMessageResponse(buildErrorCard(adminValidation.error));
+  if (user.Role === USER_ROLES.FACULTY) {
+    card = buildFacultyHelpCard();
+  } else {
+    card = buildCOEHelpCard();
   }
 
-  const pendingResult = getFormattedPendingRequests();
-  return buildMessageResponse(buildPendingRequestsCard(pendingResult.data.requests));
+  return buildMessageResponse(card);
 }
 
 /**
- * Handles /view command (admin only)
+ * Handles /register command
  * @param {object} event - Chat event
  * @param {object} user - User object
- * @param {string} args - Request ID
+ * @param {string} args - Registration details
  * @returns {object} Response
  */
-function handleViewCommand(event, user, args) {
-  // Validate admin
-  const adminValidation = validateAdmin(user.Email);
-  if (!adminValidation.success) {
-    return buildMessageResponse(buildErrorCard(adminValidation.error));
+function handleRegisterCommand(event, user, args) {
+  // This is for updating user details
+  // Format: /register regno:XXX role:faculty board:CSE
+
+  if (!args) {
+    return buildMessageResponse(buildErrorCard(
+      'Please provide registration details.\n\n' +
+      'Usage: `/register regno:YOUR_REGNO role:faculty board:CSE`'
+    ));
   }
 
-  const requestId = args.trim();
-  if (!requestId) {
-    return buildMessageResponse(buildErrorCard('Please provide a request ID. Usage: `/view <REQUEST_ID>`'));
+  // Parse args
+  const parts = args.split(/\s+/);
+  const updates = {};
+
+  parts.forEach(part => {
+    const [key, value] = part.split(':');
+    if (key && value) {
+      updates[key.toLowerCase()] = value;
+    }
+  });
+
+  if (updates.regno) {
+    // Update regno
+    const existingUser = getUserByRegno(updates.regno);
+    if (existingUser && existingUser.User_ID !== user.User_ID) {
+      return buildMessageResponse(buildErrorCard('This registration number is already taken.'));
+    }
+
+    updateCell(SHEET_NAMES.USERS, user._rowIndex, USER_COLUMNS.REGNO, updates.regno.toUpperCase());
   }
 
-  const request = getRequestById(requestId);
-  if (!request) {
-    return buildMessageResponse(buildErrorCard('Request not found.'));
+  if (updates.board) {
+    updateCell(SHEET_NAMES.USERS, user._rowIndex, USER_COLUMNS.BOARD, updates.board);
   }
 
-  // Get full request details
-  const statusData = getRequestStatus(requestId);
-  const requestUser = getUserById(request.UserID);
-
-  const requestDetails = {
-    requestId: request.RequestID,
-    userName: requestUser ? requestUser.Name : 'Unknown',
-    userEmail: requestUser ? requestUser.Email : 'Unknown',
-    qpRefNumber: request.QPReferenceNumber,
-    qpName: statusData.data.qpName,
-    requestTimestamp: request.RequestTimestamp,
-    status: request.Status
-  };
-
-  return buildMessageResponse(buildRequestDetailCard(requestDetails));
+  return buildMessageResponse(buildSuccessCard('Updated', 'Your details have been updated.'));
 }
 
 /**
- * Handles /approve command (admin only)
+ * Handles unknown commands
  * @param {object} event - Chat event
  * @param {object} user - User object
- * @param {string} args - Request ID
+ * @param {string} text - Original message text
  * @returns {object} Response
  */
-function handleApproveCommand(event, user, args) {
-  // Validate admin
-  const adminValidation = validateAdmin(user.Email);
-  if (!adminValidation.success) {
-    return buildMessageResponse(buildErrorCard(adminValidation.error));
+function handleUnknownCommand(event, user, text) {
+  if (text.trim() === '' || text.trim() === '/') {
+    return handleHelpCommand(event, user);
   }
 
-  const requestId = args.trim();
-  if (!requestId) {
-    return buildMessageResponse(buildErrorCard('Please provide a request ID. Usage: `/approve <REQUEST_ID>`'));
-  }
-
-  // Approve request
-  const result = approveRequest(requestId, user.UserID);
-
-  if (!result.success) {
-    return buildMessageResponse(buildErrorCard(result.error));
-  }
-
-  // Notify user
-  notifyUserApproval(result.data.userEmail, result.data);
-
-  return buildMessageResponse(buildApprovalResultCard(result.data));
-}
-
-/**
- * Handles /reject command (admin only)
- * @param {object} event - Chat event
- * @param {object} user - User object
- * @param {string} args - Request ID and optional reason
- * @returns {object} Response
- */
-function handleRejectCommand(event, user, args) {
-  // Validate admin
-  const adminValidation = validateAdmin(user.Email);
-  if (!adminValidation.success) {
-    return buildMessageResponse(buildErrorCard(adminValidation.error));
-  }
-
-  const parts = args.trim().split(/\s+/);
-  const requestId = parts[0];
-  const reason = parts.slice(1).join(' ');
-
-  if (!requestId) {
-    return buildMessageResponse(buildErrorCard('Please provide a request ID. Usage: `/reject <REQUEST_ID> [REASON]`'));
-  }
-
-  // Reject request
-  const result = rejectRequest(requestId, user.UserID, reason);
-
-  if (!result.success) {
-    return buildMessageResponse(buildErrorCard(result.error));
-  }
-
-  // Notify user
-  notifyUserRejection(result.data.userEmail, result.data);
-
-  return buildMessageResponse(buildRejectionResultCard(result.data));
+  return buildMessageResponse(buildErrorCard(
+    `Unknown command: "${text}"\n\nType \`/help\` to see available commands.`
+  ));
 }
 
 // =============================================================================
@@ -381,43 +393,24 @@ function onCardClick(event) {
     const user = getUserByEmail(userEmail);
 
     switch (actionName) {
-      case 'submitRequest': {
-        const qpRef = getParam('qpReference');
-        if (!qpRef) {
-          return buildMessageResponse(buildErrorCard('Please enter a question paper reference number.'));
+      case 'viewPassword': {
+        const assignmentId = getParam('assignmentId');
+        const result = getPasswordForFaculty(assignmentId, user);
+        if (result.success) {
+          return buildMessageResponse(buildPasswordCard(result.data));
         }
-        return handleRequestCommand(event, user, qpRef);
+        return buildMessageResponse(buildErrorCard(result.error));
       }
 
-      case 'approveRequest': {
-        const requestId = getParam('requestId');
-        return handleApproveCommand(event, user, requestId);
-      }
-
-      case 'rejectRequest': {
-        const requestId = getParam('requestId');
-        return handleRejectCommand(event, user, requestId);
-      }
-
-      case 'viewRequest': {
-        const requestId = getParam('requestId');
-        return handleViewCommand(event, user, requestId);
-      }
-
-      case 'viewPending': {
-        return handlePendingCommand(event, user);
-      }
-
-      case 'showHelp': {
+      case 'showHelp':
         return handleHelpCommand(event, user);
-      }
 
       default:
         return buildMessageResponse(buildErrorCard('Unknown action.'));
     }
   } catch (e) {
     logError('onCardClick', e);
-    return buildMessageResponse(buildErrorCard('An error occurred processing your request.'));
+    return buildMessageResponse(buildErrorCard('An error occurred.'));
   }
 }
 
@@ -432,47 +425,26 @@ function onCardClick(event) {
  */
 function onAddToSpace(event) {
   const spaceType = event.space.type;
-  const userEmail = getUserEmailFromEvent(event);
 
   // Get or create user
   const userResult = getOrCreateUserFromEvent(event);
+  const user = userResult.success ? userResult.data : null;
 
-  let welcomeMessage = '👋 Welcome to the Password Request Bot!\n\n';
-  welcomeMessage += 'I help you request and manage passwords for question papers.\n\n';
-  welcomeMessage += '**Quick Start:**\n';
-  welcomeMessage += '• Type `/help` to see all available commands\n';
-  welcomeMessage += '• Type `/list` to see available question papers\n';
-  welcomeMessage += '• Type `/request <QP_REF>` to request a password\n';
-
-  if (spaceType === 'DM') {
-    welcomeMessage += '\nYou can interact with me directly here.';
-  } else {
-    welcomeMessage += '\nFeel free to use commands in this space or DM me directly.';
+  if (user) {
+    const card = buildWelcomeCard(user);
+    return buildMessageResponse(card);
   }
 
-  return { text: welcomeMessage };
+  return {
+    text: '👋 Welcome to the EQPMS Password Bot!\n\n' +
+          'I help you manage passwords for question paper submissions.\n\n' +
+          'Type `/help` to see available commands.'
+  };
 }
 
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
-
-/**
- * Handles unknown commands
- * @param {object} event - Chat event
- * @param {object} user - User object
- * @param {string} text - Original message text
- * @returns {object} Response
- */
-function handleUnknownCommand(event, user, text) {
-  if (text.trim() === '' || text.trim() === '/') {
-    return handleHelpCommand(event, user);
-  }
-
-  return buildMessageResponse(buildErrorCard(
-    `Unknown command: "${text}"\n\nType \`/help\` to see available commands.`
-  ));
-}
 
 /**
  * Builds a message response object
@@ -490,44 +462,40 @@ function buildMessageResponse(cardOrText) {
 }
 
 // =============================================================================
-// STANDALONE FUNCTIONS FOR TESTING
+// SETUP FUNCTIONS
 // =============================================================================
 
 /**
- * Tests the bot functionality
- * Can be run from the Apps Script editor
+ * Initializes the system
+ * Run this once after deployment
  */
-function testBot() {
-  console.log('Testing Password Request Bot...');
+function initializeSystem() {
+  console.log('Initializing Password Bot System...');
 
-  // Test user retrieval
-  const admins = getAllAdmins();
-  console.log(`Found ${admins.length} admin(s)`);
+  // Initialize sheets
+  initializeSheets();
 
-  // Test question papers
-  const qps = getActiveQuestionPapers();
-  console.log(`Found ${qps.length} active question paper(s)`);
-
-  // Test pending requests
-  const pending = getPendingRequests();
-  console.log(`Found ${pending.length} pending request(s)`);
-
-  console.log('Test complete.');
+  console.log('System initialized successfully.');
+  console.log('Next steps:');
+  console.log('1. Deploy as Web App for API access');
+  console.log('2. Configure EQPMS to call the API');
+  console.log('3. Add users or sync from EQPMS');
 }
 
 /**
  * Sets up initial admin user
  * Run this once after deployment
  */
-function setupInitialAdmin() {
+function setupAdmin() {
   // TODO: Replace with your email
   const adminEmail = 'YOUR_EMAIL@example.com';
-  const adminName = 'Admin User';
 
   const result = addUser({
-    name: adminName,
+    name: 'Admin',
     email: adminEmail,
-    role: USER_ROLES.ADMIN
+    regno: 'ADMIN001',
+    role: USER_ROLES.ADMIN,
+    board: 'ALL'
   });
 
   if (result.success) {
