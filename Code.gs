@@ -14,17 +14,29 @@
  */
 function onMessage(event) {
   try {
+    // Log the event for debugging
+    console.log('Received event:', JSON.stringify(event));
+
     const message = event.message;
-    const text = message.text ? message.text.trim() : '';
+    const text = message && message.text ? message.text.trim() : '';
     const userEmail = getUserEmailFromEvent(event);
 
     // Get or create user
     const userResult = getOrCreateUserFromEvent(event);
     if (!userResult.success) {
-      return buildMessageResponse(buildErrorCard(userResult.error));
+      return { text: '❌ Error: ' + userResult.error };
     }
 
     const user = userResult.data;
+
+    // If empty message, show welcome
+    if (!text || text === '') {
+      return {
+        text: '👋 Hello ' + user.Name + '!\n\n' +
+              'I am the EQPMS Password Bot.\n\n' +
+              'Type `/help` to see available commands.'
+      };
+    }
 
     // Parse command
     const command = parseCommand(text);
